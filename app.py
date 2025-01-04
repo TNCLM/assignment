@@ -1,6 +1,32 @@
 import re  
 from werkzeug.utils import escape #for preventing sql injection and xss added to login and egister
 
+#encryption for the email
+import os
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+import base64
+
+KEY_FILE = "encryption_key.bin"
+
+# Load or generate encryption key
+if not os.path.exists(KEY_FILE):
+    with open(KEY_FILE, "wb") as keyfile:
+        keyfile.write(get_random_bytes(32))
+with open(KEY_FILE, "rb") as keyfile:
+    encryption_key = keyfile.read()
+
+def encrypt_data(data):
+    cipher = AES.new(encryption_key, AES.MODE_EAX)
+    ciphertext, tag = cipher.encrypt_and_digest(data.encode())
+    return base64.b64encode(cipher.nonce + tag + ciphertext).decode()
+
+def decrypt_data(enc_data):
+    enc_data = base64.b64decode(enc_data.encode())
+    nonce, tag, ciphertext = enc_data[:16], enc_data[16:32], enc_data[32:]
+    cipher = AES.new(encryption_key, AES.MODE_EAX, nonce=nonce)
+    return cipher.decrypt_and_verify(ciphertext, tag).decode()
+
 # Define password validation function
 def is_password_valid(password):
 
@@ -63,10 +89,12 @@ def register():
 
         cursor = db.cursor()
         try:
+            encrypted_email = encrypt_data(email)
             cursor.execute(
-                "INSERT INTO users (username, password, email, secondary_password) VALUES (%s, %s, %s, %s)",
-                (username, hashed_password, email, hashed_secondary_password),
-            )
+            "INSERT INTO users (username, password, email, secondary_password) VALUES (%s, %s, %s, %s)",
+            (username, hashed_password, encrypted_email, hashed_secondary_password),
+            ) ## encrypt email
+
             db.commit()
             flash("Registration successful! Please log in.", "success")
             return redirect(url_for("login"))
@@ -194,6 +222,13 @@ def view_database():
         rows = cursor.fetchall()
         cursor.execute(f"SHOW COLUMNS FROM {table_name}")
         columns = [col[0] for col in cursor.fetchall()]
+
+        if table_name == "users":
+            rows = [
+                {**row, "email": decrypt_data(row["email"])} if "email" in row else row
+                for row in rows
+            ] #decryption for the email
+
         database_data[table_name] = {"columns": columns, "rows": rows}
 
     return render_template("view_database.html", database_data=database_data)
