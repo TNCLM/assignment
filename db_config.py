@@ -13,6 +13,7 @@ def get_db_connection():
         host="localhost",
         user="root",
         password="",
+        ssl={'ssl': {'ca': '/path/to/ca-cert.pem'}},  # Enable SSL
         database="company_db"
     )
 
@@ -27,6 +28,7 @@ def get_db_connection(database="company_db"):
         user="root",
         password="",  # Add your MySQL password if applicable
         database=database,  # Ensures the correct database is selected
+        ssl={'ssl': {'ca': '/path/to/ca-cert.pem'}},  # Enable SSL
         autocommit=True
     )
 
